@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,viewport-fit=cover" />
+<meta name="theme-color" content="#0b1220" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<title>Tablero General · TG</title>
+<style>
+  :root{
+    --bg:#0b1220;
+    --panel:#10192c;
+    --panel-2:#16223b;
+    --line:#1f2c4a;
+    --text:#e8edf7;
+    --muted:#90a0c0;
+    --accent:#ffb020;
+    --accent-2:#ff5252;
+    --ok:#37d399;
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:"Inter",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    -webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+  body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+
+  header{
+    padding:14px 16px 10px;
+    background:linear-gradient(180deg,#0e1830 0%,#0b1220 100%);
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5
+  }
+  header .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  header h1{margin:0;font-size:15px;letter-spacing:.5px;font-weight:700}
+  header .sub{font-size:11px;color:var(--muted);margin-top:2px;letter-spacing:.3px}
+  .badge{font-size:10px;padding:4px 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}
+  .toolbar{display:flex;gap:6px}
+  .iconbtn{
+    background:var(--panel);border:1px solid var(--line);color:var(--text);
+    width:36px;height:36px;border-radius:10px;display:grid;place-items:center;cursor:pointer;
+    transition:transform .15s ease,background .15s ease
+  }
+  .iconbtn:active{transform:scale(.94)}
+  .iconbtn.active{background:#2a1a00;border-color:#5a3a00;color:var(--accent)}
+
+  main{flex:1;position:relative;overflow:hidden;background:
+    radial-gradient(1200px 600px at 50% -10%,#142146 0%,transparent 60%),
+    var(--bg)}
+  #stage{
+    position:absolute;inset:0;display:grid;place-items:center;
+    padding:8px 8px 240px;
+  }
+  #board-wrap{position:relative;width:100%;max-width:680px;max-height:100%;
+    aspect-ratio:3816/3296;display:block}
+  #board{position:absolute;inset:0;width:100%;height:100%}
+  #board svg{width:100%;height:100%;display:block;
+    filter:drop-shadow(0 12px 28px rgba(0,0,0,.45))}
+
+  /* Skeleton */
+  #loading{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:13px;letter-spacing:.5px}
+  #loading.hidden{display:none}
+
+  /* Hotspots overlay sits above the SVG inside the wrap */
+  #hotspots{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  #hotspots rect.hot{pointer-events:auto;cursor:pointer}
+  /* Dimmer: dark overlay with cutout for selected hotspot */
+  #hotspots .dimmer{fill:#0b1220;opacity:0;transition:opacity .3s ease;pointer-events:none}
+  body.has-selection #hotspots .dimmer{opacity:.55}
+
+  /* Debug mode shows the rectangles */
+  body.debug #hotspots rect.hot{
+    fill:rgba(255,80,80,.08);
+    stroke:#ff5252;stroke-width:6;stroke-dasharray:14 10
+  }
+  body.debug #hotspots text{fill:#fff;font-weight:700;font-size:80px;
+    paint-order:stroke;stroke:#000;stroke-width:6}
+  body.debug #hotspots .dimmer{display:none}
+
+  /* selection glow */
+  #hotspots rect.hot.selected{
+    fill:rgba(255,176,32,.18);
+    stroke:var(--accent);stroke-width:10;stroke-dasharray:0;
+    animation:pulse 1.4s ease-in-out infinite
+  }
+  @keyframes pulse{
+    0%,100%{filter:drop-shadow(0 0 0 rgba(255,176,32,.0))}
+    50%   {filter:drop-shadow(0 0 14px rgba(255,176,32,.55))}
+  }
+
+  /* Bottom sheet */
+  #sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:20;
+    background:linear-gradient(180deg,var(--panel) 0%,var(--panel-2) 100%);
+    border-top:1px solid var(--line);
+    border-radius:22px 22px 0 0;
+    box-shadow:0 -16px 40px rgba(0,0,0,.5);
+    transform:translateY(calc(100% - 76px));
+    transition:transform .35s cubic-bezier(.2,.9,.25,1);
+    padding:8px 18px max(18px,env(safe-area-inset-bottom));
+    max-height:75vh;max-height:75dvh;overflow:hidden;
+  }
+  #sheet.open{transform:translateY(0)}
+  #sheet .grab{width:42px;height:5px;border-radius:99px;background:#33446b;margin:8px auto 6px;display:block}
+  #sheet .head{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:6px 2px 10px
+  }
+  #sheet .tag{
+    display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);
+    border:1px solid var(--line);padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.02)
+  }
+  #sheet .tag .dot{width:7px;height:7px;border-radius:99px;background:var(--ok)}
+  #sheet h2{margin:2px 0 2px;font-size:18px;font-weight:700;letter-spacing:.3px}
+  #sheet .close{
+    background:transparent;border:1px solid var(--line);color:var(--text);
+    width:34px;height:34px;border-radius:10px;display:grid;place-items:center;cursor:pointer
+  }
+  #sheet .body{padding:4px 0 14px;overflow-y:auto;max-height:calc(75dvh - 110px);scrollbar-width:thin}
+  .info-list{display:flex;flex-direction:column;gap:1px;margin-top:8px;
+    background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .info-row{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:11px 14px;background:rgba(255,255,255,.025)
+  }
+  .info-row .k{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;flex-shrink:0}
+  .info-row .v{font-size:13.5px;font-weight:600;text-align:right;color:#eef3ff}
+  .desc{font-size:13px;line-height:1.5;color:#cdd6ea;margin-top:10px;
+    padding:10px 14px;background:rgba(255,176,32,.08);border-left:3px solid var(--accent);
+    border-radius:8px;white-space:pre-wrap}
+
+  /* Zoom hint */
+  .zoom-hint{
+    position:absolute;top:8px;left:50%;transform:translateX(-50%);
+    background:rgba(255,176,32,.9);color:#0b1220;font-size:11px;font-weight:700;
+    padding:5px 12px;border-radius:99px;pointer-events:none;
+    opacity:0;transition:opacity .25s;letter-spacing:.3px
+  }
+  .zoom-hint.show{opacity:1}
+
+  #board-wrap{touch-action:none}
+
+  /* Hint when nothing selected */
+  #sheet.hint .body{display:none}
+  #sheet.hint .head h2{color:var(--muted);font-weight:500}
+  #sheet.hint .tag{display:none}
+
+  /* tiny helper */
+  .kbd{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;
+    background:rgba(255,255,255,.06);padding:2px 6px;border-radius:6px;color:#cdd6ea
+  }
+
+  @media (min-width:720px){
+    #sheet{max-width:560px;left:50%;transform:translate(-50%,calc(100% - 76px));border-radius:22px}
+    #sheet.open{transform:translate(-50%,0)}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="row">
+    <div>
+      <h1>TABLERO GENERAL · TG</h1>
+      <div class="sub">380 V + N · 3F · 60 Hz · Oficina Prados del Paraíso</div>
+    </div>
+    <div class="toolbar">
+      <button class="iconbtn" id="btn-debug" title="Mostrar/Ocultar zonas" aria-label="Debug">
+        <!-- target icon -->
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+      </button>
+      <button class="iconbtn" id="btn-reset" title="Reiniciar selección" aria-label="Reiniciar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="stage">
+    <div id="board-wrap">
+      <div id="board"></div>
+      <svg id="hotspots" viewBox="0 0 3816 3296" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+      <div id="loading">Cargando tablero…</div>
+    </div>
+    <div class="zoom-hint" id="zoom-hint">Pellizcá para hacer zoom · doble tap = reset</div>
+  </div>
+</main>
+
+<aside id="sheet" class="hint" aria-live="polite">
+  <span class="grab"></span>
+  <div class="head">
+    <div>
+      <span class="tag"><span class="dot"></span><span id="sh-tag">Activo</span></span>
+      <h2 id="sh-title">Toca un interruptor para ver detalles</h2>
+    </div>
+    <button class="close" id="sh-close" aria-label="Cerrar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="body">
+    <div class="desc" id="sh-desc"></div>
+    <div class="info-list" id="sh-list"></div>
+  </div>
+</aside>
+
+<script>
+/* =========================================================
+   1) DATOS DE CIRCUITOS
+   Cada item: label (chip), title (nombre), desc (descripción
+   o áreas que cubre) y fields (lista de [clave, valor]).
+   Editá libremente.
+   ========================================================= */
+const DATA = {
+  IG: {
+    label:"IG",
+    title:"Interruptor General",
+    desc:"Caja moldeada 3×32 A · 380 V + N · 3F · 60 Hz",
+    fields:[
+      ["Ui",                "500 V"],
+      ["Uimp",              "6 kV"],
+      ["Poder de ruptura",  "42 kA"],
+      ["Fases",             "3×25 mm² N2XOH"],
+      ["Neutro",            "1×25 mm² N2XOH"],
+      ["Tierra",            "1×16 mm² NH-90"],
+    ]
+  },
+  C1: {
+    label:"C1",
+    title:"Alumbrado Administración",
+    desc:"Gerencia · Baños · Kitchenette · Luces de emergencia",
+    fields:[
+      ["Calibre",      "2×16 A"],
+      ["Diferencial",  "2×25 A · 30 mA"],
+      ["Ruptura",      "6 kA"],
+      ["Curva",        "Tipo C"],
+      ["Fase R",       "2.5 mm² NH-90"],
+      ["Neutro",       "2.5 mm² NH-90"],
+      ["Tierra",       "2.5 mm² NH-90"],
+    ]
+  },
+  C2: {
+    label:"C2",
+    title:"Alumbrado Sala de Experiencias",
+    desc:"Toma de Firmas · Área de Ejecutivos · Recepción · Área de Trabajo · Luces de emergencia",
+    fields:[
+      ["Calibre",      "2×16 A"],
+      ["Diferencial",  "2×25 A · 30 mA"],
+      ["Ruptura",      "6 kA"],
+      ["Curva",        "Tipo C"],
+      ["Fase S",       "2.5 mm² NH-90"],
+      ["Neutro",       "2.5 mm² NH-90"],
+      ["Tierra",       "2.5 mm² NH-90"],
+    ]
+  },
+  C3: {
+    label:"C3",
+    title:"Tomacorrientes Sala de Experiencias",
+    desc:"Toma de Firmas · Administración",
+    fields:[
+      ["Calibre",      "2×20 A"],
+      ["Diferencial",  "2×25 A · 30 mA"],
+      ["Ruptura",      "6 kA"],
+      ["Curva",        "Tipo C"],
+      ["Fase T",       "4 mm² NH-90"],
+      ["Neutro",       "4 mm² NH-90"],
+      ["Tierra",       "2.5 mm² NH-90"],
+    ]
+  },
+  C4: {
+    label:"C4",
+    title:"Tomacorrientes Recepción",
+    desc:"Kitchenette · Área de Trabajo",
+    fields:[
+      ["Calibre",      "2×20 A"],
+      ["Diferencial",  "2×25 A · 30 mA"],
+      ["Ruptura",      "6 kA"],
+      ["Curva",        "Tipo C"],
+      ["Fase R",       "4 mm² NH-90"],
+      ["Neutro",       "4 mm² NH-90"],
+      ["Tierra",       "2.5 mm² NH-90"],
+    ]
+  },
+  C5: {
+    label:"C5",
+    title:"Aire Acondicionado Recepción",
+    desc:"",
+    fields:[
+      ["Calibre",      "2×20 A"],
+      ["Diferencial",  "2×25 A · 30 mA"],
+      ["Ruptura",      "6 kA"],
+      ["Curva",        "Tipo C"],
+      ["Fase S",       "4 mm² NH-90"],
+      ["Neutro",       "4 mm² NH-90"],
+      ["Tierra",       "2.5 mm² NH-90"],
+    ]
+  },
+  C6: {
+    label:"C6",
+    title:"Aire Acondicionado Toma de Firmas",
+    desc:"",
+    fields:[
+      ["Calibre",      "2×20 A"],
+      ["Diferencial",  "2×25 A · 30 mA"],
+      ["Ruptura",      "6 kA"],
+      ["Curva",        "Tipo C"],
+      ["Fase R",       "4 mm² NH-90"],
+      ["Neutro",       "4 mm² NH-90"],
+      ["Tierra",       "2.5 mm² NH-90"],
+    ]
+  },
+  C7: {
+    label:"C7",
+    title:"Aire Acondicionado Área de Trabajo",
+    desc:"",
+    fields:[
+      ["Calibre",      "2×20 A"],
+      ["Diferencial",  "2×25 A · 30 mA"],
+      ["Ruptura",      "6 kA"],
+      ["Curva",        "Tipo C"],
+      ["Fase S",       "4 mm² NH-90"],
+      ["Neutro",       "4 mm² NH-90"],
+      ["Tierra",       "2.5 mm² NH-90"],
+    ]
+  },
+  C8: {
+    label:"C8",
+    title:"Aire Acondicionado Gerencia",
+    desc:"",
+    fields:[
+      ["Calibre",      "2×20 A"],
+      ["Diferencial",  "2×25 A · 30 mA"],
+      ["Ruptura",      "6 kA"],
+      ["Curva",        "Tipo C"],
+      ["Fase T",       "4 mm² NH-90"],
+      ["Neutro",       "4 mm² NH-90"],
+      ["Tierra",       "2.5 mm² NH-90"],
+    ]
+  },
+  C9: {
+    label:"C9",
+    title:"Panel C.A.C.I.",
+    desc:"",
+    fields:[
+      ["Calibre",      "2×20 A"],
+      ["Diferencial",  "2×25 A · 30 mA"],
+      ["Ruptura",      "6 kA"],
+      ["Curva",        "Tipo C"],
+      ["Fase R",       "4 mm² NH-90"],
+      ["Neutro",       "4 mm² NH-90"],
+      ["Tierra",       "2.5 mm² NH-90"],
+    ]
+  },
+};
+
+/* =========================================================
+   2) ZONAS CLICKEABLES (coordenadas en viewBox 3816×3296)
+   Posiciones detectadas automáticamente sobre los
+   termomagnéticos visibles del SVG. Activá el modo debug
+   (icono diana en la cabecera) para verlas y ajustarlas.
+   ========================================================= */
+const HOTSPOTS = [
+  // ── Interruptor General (CHINT, arriba al centro) ──────
+  { id:"IG", x:1560, y:100,  w:580, h:780 },
+
+  // ── Lado IZQUIERDO (C1-C5) – de arriba hacia abajo ─────
+  { id:"C1", x:180,  y:1240, w:1100, h:380 },  // fila 1
+  { id:"C2", x:180,  y:1630, w:1100, h:380 },  // fila 2
+  { id:"C3", x:180,  y:2030, w:1100, h:380 },  // fila 3
+  { id:"C4", x:180,  y:2430, w:1100, h:380 },  // fila 4
+  { id:"C5", x:180,  y:2820, w:1100, h:380 },  // fila 5
+
+  // ── Lado DERECHO (C6-C9) – de arriba hacia abajo ───────
+  { id:"C6", x:2540, y:1240, w:1100, h:380 },  // fila 1
+  { id:"C7", x:2540, y:1630, w:1100, h:380 },  // fila 2
+  { id:"C8", x:2540, y:2030, w:1100, h:380 },  // fila 3
+  { id:"C9", x:2540, y:2430, w:1100, h:380 },  // fila 4
+];
+
+/* =========================================================
+   3) Carga del SVG
+   ========================================================= */
+async function loadBoard(){
+  const board = document.getElementById('board');
+  const loading = document.getElementById('loading');
+  try{
+    const res = await fetch('tablero.svg',{cache:'force-cache'});
+    if(!res.ok) throw new Error('No se pudo cargar tablero.svg');
+    const txt = await res.text();
+    board.innerHTML = txt;
+    const svg = board.querySelector('svg');
+    if(svg){
+      svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+      svg.removeAttribute('width');
+      svg.removeAttribute('height');
+    }
+    loading.classList.add('hidden');
+    drawHotspots();
+  }catch(err){
+    loading.textContent = 'Error: '+err.message;
+  }
+}
+
+/* =========================================================
+   4) Crea rectángulos clickeables + dimmer con cutout
+   ========================================================= */
+const SVGNS = 'http://www.w3.org/2000/svg';
+function drawHotspots(){
+  const layer = document.getElementById('hotspots');
+  layer.innerHTML = '';
+
+  // Definir mask con cutout dinámico (uno por hotspot)
+  const defs = document.createElementNS(SVGNS,'defs');
+  HOTSPOTS.forEach(h=>{
+    const mask = document.createElementNS(SVGNS,'mask');
+    mask.setAttribute('id','mk-'+h.id);
+    const bg = document.createElementNS(SVGNS,'rect');
+    bg.setAttribute('x',0); bg.setAttribute('y',0);
+    bg.setAttribute('width',3816); bg.setAttribute('height',3296);
+    bg.setAttribute('fill','#fff');
+    mask.appendChild(bg);
+    const cut = document.createElementNS(SVGNS,'rect');
+    cut.setAttribute('x',h.x-30); cut.setAttribute('y',h.y-30);
+    cut.setAttribute('width',h.w+60); cut.setAttribute('height',h.h+60);
+    cut.setAttribute('rx',32); cut.setAttribute('fill','#000');
+    mask.appendChild(cut);
+    defs.appendChild(mask);
+  });
+  layer.appendChild(defs);
+
+  // Dimmer (oculto hasta que haya selección)
+  const dim = document.createElementNS(SVGNS,'rect');
+  dim.setAttribute('class','dimmer');
+  dim.setAttribute('id','dimmer');
+  dim.setAttribute('x',0); dim.setAttribute('y',0);
+  dim.setAttribute('width',3816); dim.setAttribute('height',3296);
+  layer.appendChild(dim);
+
+  // Hotspots clickeables
+  HOTSPOTS.forEach(h=>{
+    const r = document.createElementNS(SVGNS,'rect');
+    r.setAttribute('class','hot');
+    r.setAttribute('id','hs-'+h.id);
+    r.setAttribute('data-id',h.id);
+    r.setAttribute('x',h.x); r.setAttribute('y',h.y);
+    r.setAttribute('width',h.w); r.setAttribute('height',h.h);
+    r.setAttribute('rx',24); r.setAttribute('ry',24);
+    r.setAttribute('fill','transparent');
+    r.setAttribute('stroke','none');
+    r.addEventListener('click',()=>select(h.id));
+    layer.appendChild(r);
+
+    // etiqueta sólo visible en debug
+    const t = document.createElementNS(SVGNS,'text');
+    t.setAttribute('x', h.x + h.w/2);
+    t.setAttribute('y', h.y + h.h/2 + 28);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('fill','transparent');
+    t.textContent = h.id;
+    layer.appendChild(t);
+  });
+}
+
+/* =========================================================
+   5) Selección + Panel inferior
+   ========================================================= */
+let currentId = null;
+const sheet   = document.getElementById('sheet');
+const shTitle = document.getElementById('sh-title');
+const shTag   = document.getElementById('sh-tag');
+const shList  = document.getElementById('sh-list');
+const shDesc  = document.getElementById('sh-desc');
+
+function select(id){
+  if(currentId === id){ closeSheet(); return; }
+  currentId = id;
+  document.querySelectorAll('#hotspots rect.hot').forEach(r=>{
+    r.classList.toggle('selected', r.dataset.id===id);
+  });
+  // aplicar dimmer con mask del hotspot seleccionado
+  const dim = document.getElementById('dimmer');
+  if(dim) dim.setAttribute('mask','url(#mk-'+id+')');
+  document.body.classList.add('has-selection');
+
+  const d = DATA[id]; if(!d) return;
+  sheet.classList.remove('hint');
+  sheet.classList.add('open');
+  shTag.textContent = d.label || id;
+  shTitle.textContent = d.title || id;
+  shDesc.textContent = d.desc || '';
+  shDesc.style.display = d.desc ? 'block' : 'none';
+  shList.innerHTML = (d.fields||[])
+    .map(([k,v]) => `<div class="info-row"><span class="k">${k}</span><span class="v">${v}</span></div>`)
+    .join('');
+}
+
+function closeSheet(){
+  currentId = null;
+  sheet.classList.remove('open');
+  sheet.classList.add('hint');
+  shTag.textContent = '—';
+  shTitle.textContent = 'Toca un interruptor para ver detalles';
+  shList.innerHTML = '';
+  shDesc.textContent = '';
+  document.querySelectorAll('#hotspots rect.hot').forEach(r=>r.classList.remove('selected'));
+  document.body.classList.remove('has-selection');
+}
+
+/* =========================================================
+   6) Pinch-zoom + pan + double-tap reset
+   ========================================================= */
+const wrap = document.getElementById('board-wrap');
+let zoom = 1, panX = 0, panY = 0;
+let pointers = new Map(), startDist = 0, startZoom = 1, startPanX = 0, startPanY = 0;
+let lastTap = 0;
+
+function applyTransform(){
+  wrap.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
+  wrap.style.transformOrigin = 'center center';
+}
+function clampPan(){
+  const r = wrap.getBoundingClientRect();
+  const stage = document.getElementById('stage').getBoundingClientRect();
+  const maxX = Math.max(0,(r.width-stage.width)/2);
+  const maxY = Math.max(0,(r.height-stage.height)/2);
+  panX = Math.max(-maxX, Math.min(maxX, panX));
+  panY = Math.max(-maxY, Math.min(maxY, panY));
+}
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+
+wrap.addEventListener('pointerdown', (e)=>{
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size === 2){
+    const [a,b] = [...pointers.values()];
+    startDist = dist(a,b); startZoom = zoom;
+    startPanX = panX; startPanY = panY;
+  }
+});
+wrap.addEventListener('pointermove', (e)=>{
+  if(!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size === 2){
+    const [a,b] = [...pointers.values()];
+    const d = dist(a,b);
+    zoom = Math.max(1, Math.min(4, startZoom * (d/startDist)));
+    applyTransform();
+  } else if(pointers.size === 1 && zoom > 1){
+    const p = pointers.get(e.pointerId);
+    const last = wrap._lastP || p;
+    panX += p.x - last.x; panY += p.y - last.y;
+    clampPan();
+    applyTransform();
+    wrap._lastP = p;
+  }
+});
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size < 2) startDist = 0;
+  if(pointers.size === 0){
+    wrap._lastP = null;
+    if(zoom < 1.05){ zoom=1; panX=0; panY=0; applyTransform(); }
+  }
+}
+wrap.addEventListener('pointerup', endPointer);
+wrap.addEventListener('pointercancel', endPointer);
+wrap.addEventListener('pointerleave', endPointer);
+
+// Doble tap → reset zoom
+wrap.addEventListener('click', (e)=>{
+  const now = Date.now();
+  if(now - lastTap < 300){
+    if(zoom > 1){ zoom=1; panX=0; panY=0; applyTransform(); }
+    else { zoom=2; applyTransform(); }
+    e.preventDefault();
+  }
+  lastTap = now;
+});
+
+// Mouse wheel zoom (escritorio)
+wrap.addEventListener('wheel', (e)=>{
+  if(!e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  zoom = Math.max(1, Math.min(4, zoom + (e.deltaY < 0 ? .15 : -.15)));
+  if(zoom===1){ panX=0; panY=0; }
+  applyTransform();
+}, {passive:false});
+
+// Hint inicial
+const zoomHint = document.getElementById('zoom-hint');
+setTimeout(()=>zoomHint.classList.add('show'), 800);
+setTimeout(()=>zoomHint.classList.remove('show'), 4500);
+
+/* =========================================================
+   7) Toolbar: debug / reset / sheet drag
+   ========================================================= */
+document.getElementById('btn-debug').addEventListener('click', e=>{
+  document.body.classList.toggle('debug');
+  e.currentTarget.classList.toggle('active', document.body.classList.contains('debug'));
+});
+document.getElementById('btn-reset').addEventListener('click', ()=>{
+  closeSheet();
+  zoom=1; panX=0; panY=0; applyTransform();
+});
+document.getElementById('sh-close').addEventListener('click', closeSheet);
+
+// abrir/cerrar sheet tocando el "head"
+sheet.querySelector('.head').addEventListener('click', (e)=>{
+  if(e.target.closest('#sh-close')) return;
+  if(sheet.classList.contains('hint')) return;
+  sheet.classList.toggle('open');
+});
+
+/* =========================================================
+   8) Service Worker (PWA offline)
+   ========================================================= */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+
+/* =========================================================
+   9) Init
+   ========================================================= */
+loadBoard();
+</script>
+</body>
+</html>
